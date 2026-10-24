@@ -19,6 +19,17 @@
   - 02：手动样例运行到 LLM 调用和结构化解析，请求体与鉴权头正确。
 - **未验证**：真实 Google Sheets、Slack、Gmail、真实 LLM 服务商、真实 SupportPilot 实例。
 
+## 不依赖 n8n Assistant 也能运行
+
+- 3 个工作流都不调用 n8n Assistant 或其沙箱。Assistant 设置向导里的「Add a code sandbox」一步可以跳过或关闭。
+- 不需要任何外部账号即可验证的请求：
+  - 01：`POST /webhook/lead-capture`，body 为 `{"name":"","email":"not-an-email"}`，应返回 400 `name_or_email_invalid`。
+  - 03：`POST /webhook/ask-supportpilot`，body 为 `{"message":""}`，应返回 400 `message_required`。
+- 02 可通过 Manual Trigger 运行，需先配置 `LLM_*`。Gmail 节点会因样例邮件不是真实消息而停止，这是预期行为。
+- 完整的导入、凭据和测试步骤见 `docs/自托管说明.md` 的「Run the portfolio workflows」一节。
+- 可选的 Assistant 沙箱配置见同文件的「Optional: n8n Assistant sandbox」一节。占位 Service URL `http://sandbox.internal:3200` 在本仓库中不存在对应服务，不要直接使用。
+- 沙箱说明依据 n8n 官方文档整理，未在本仓库中实际启动沙箱或 Assistant 验证。
+
 ## SupportPilot 接口
 
 请求体按 SupportPilot `backend/app/api/chat.py` 的 schema：
