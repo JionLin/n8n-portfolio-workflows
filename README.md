@@ -34,6 +34,23 @@ docker compose up -d
 
 Open http://localhost:5678 and create the owner account. Full steps, networking notes and env reference: [docs/自托管说明.md](docs/自托管说明.md).
 
+## Seeing results without n8n Assistant
+
+None of the three workflows uses n8n Assistant or its sandbox. In the Assistant setup wizard, skip or close the **Add a code sandbox** step. You can import, test and activate the workflows without it.
+
+Checks that need no external accounts (use the test URL shown in the Webhook node after **Listen for test event**, or activate the workflow first):
+
+| Workflow | Request | Expected response |
+| --- | --- | --- |
+| 01 Lead capture | `POST /webhook/lead-capture` with `{"name":"","email":"not-an-email"}` | `400` with `name_or_email_invalid` |
+| 03 SupportPilot bridge | `POST /webhook/ask-supportpilot` with `{"message":""}` | `400` with `message_required` |
+
+Workflow 02 can be run from its Manual Trigger once the `LLM_*` variables are set. The Gmail nodes stop on the sample email by design. Step-by-step import, credentials and test instructions: [docs/自托管说明.md](docs/自托管说明.md#run-the-portfolio-workflows).
+
+### Optional: n8n AI Assistant sandbox
+
+Only needed if you want n8n's built-in Assistant. It requires a model API key and a sandbox. This repo's `docker-compose.yml` does not run a sandbox, so do not paste the wizard's placeholder Service URL (`http://sandbox.internal:3200`) as-is. Setup options and the Service URL and API key rules: [docs/自托管说明.md](docs/自托管说明.md#optional-n8n-assistant-sandbox). Official guide: [Set up n8n Assistant](https://docs.n8n.io/deploy/host-n8n/configure-n8n/set-up-ai-assistant).
+
 ## Repository checks
 
 ```bash
