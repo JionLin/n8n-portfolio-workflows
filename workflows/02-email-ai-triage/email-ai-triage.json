@@ -1,0 +1,404 @@
+{
+  "name": "02 - Email AI triage (OpenAI-compatible classification, label or draft)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c2000001-0000-4000-8000-000000000001",
+      "name": "Manual Trigger (sample email)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 120]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c2000002-0000-4000-8000-000000000001",
+              "name": "id",
+              "value": "sample-message-001",
+              "type": "string"
+            },
+            {
+              "id": "c2000002-0000-4000-8000-000000000002",
+              "name": "threadId",
+              "value": "sample-thread-001",
+              "type": "string"
+            },
+            {
+              "id": "c2000002-0000-4000-8000-000000000003",
+              "name": "from",
+              "value": "sender@example.com",
+              "type": "string"
+            },
+            {
+              "id": "c2000002-0000-4000-8000-000000000004",
+              "name": "subject",
+              "value": "Question about my March invoice",
+              "type": "string"
+            },
+            {
+              "id": "c2000002-0000-4000-8000-000000000005",
+              "name": "text",
+              "value": "Hi, I think I was charged twice for the March plan. Could someone check the invoice and let me know? Thanks.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c2000002-0000-4000-8000-000000000100",
+      "name": "Sample Email Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [220, 120]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "readStatus": "unread",
+          "labelIds": [
+            "INBOX"
+          ]
+        },
+        "options": {}
+      },
+      "id": "c2000003-0000-4000-8000-000000000100",
+      "name": "New Inbox Email (Gmail)",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [0, 380],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c2000004-0000-4000-8000-000000000001",
+              "name": "email_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "c2000004-0000-4000-8000-000000000002",
+              "name": "thread_id",
+              "value": "={{ $json.threadId }}",
+              "type": "string"
+            },
+            {
+              "id": "c2000004-0000-4000-8000-000000000003",
+              "name": "from",
+              "value": "={{ $json.from }}",
+              "type": "string"
+            },
+            {
+              "id": "c2000004-0000-4000-8000-000000000004",
+              "name": "subject",
+              "value": "={{ $json.subject ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "c2000004-0000-4000-8000-000000000005",
+              "name": "body",
+              "value": "={{ String($json.text || $json.snippet || '').slice(0, 4000) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c2000004-0000-4000-8000-000000000100",
+      "name": "Normalize Email",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [440, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LLM_BASE_URL }}/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.LLM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.LLM_MODEL, temperature: 0, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Classify the email for a small support and sales inbox. Reply only with a JSON object with keys: category (billing | technical_support | sales_inquiry | spam | other), priority (low | medium | high), needs_reply (boolean), suggested_label (same values as category), draft_reply (string, a draft for human review, no prices or promises), summary (string, at most 25 words).' }, { role: 'user', content: 'Subject: ' + $json.subject + '\\n\\n' + $json.body } ] }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "c2000005-0000-4000-8000-000000000100",
+      "name": "Classify with LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [660, 250],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ALLOWED_CATEGORIES = ['billing', 'technical_support', 'sales_inquiry', 'spam', 'other'];\nconst ALLOWED_PRIORITIES = ['low', 'medium', 'high'];\n\nfunction parseModelReply(rawContent) {\n  try {\n    return JSON.parse(rawContent);\n  } catch (error) {\n    return null;\n  }\n}\n\nfunction isValidReply(reply) {\n  return reply !== null\n    && typeof reply === 'object'\n    && ALLOWED_CATEGORIES.includes(reply.category)\n    && ALLOWED_PRIORITIES.includes(reply.priority);\n}\n\nfunction readLabelIdsByCategory() {\n  try {\n    return JSON.parse($env.GMAIL_LABEL_IDS_JSON || '{}');\n  } catch (error) {\n    return {};\n  }\n}\n\nfunction buildTriageResult(reply, sourceEmail) {\n  const hasValidReply = isValidReply(reply);\n  const category = hasValidReply ? reply.category : 'other';\n  const labelIdsByCategory = readLabelIdsByCategory();\n\n  return {\n    email_id: sourceEmail.email_id,\n    thread_id: sourceEmail.thread_id,\n    from: sourceEmail.from,\n    subject: sourceEmail.subject,\n    category,\n    priority: hasValidReply ? reply.priority : 'medium',\n    needs_reply: hasValidReply && reply.needs_reply === true,\n    draft_reply: hasValidReply && typeof reply.draft_reply === 'string' ? reply.draft_reply : '',\n    summary: hasValidReply && typeof reply.summary === 'string' ? reply.summary : '',\n    gmail_label_id: labelIdsByCategory[category] ?? null,\n    needs_human_review: !hasValidReply\n  };\n}\n\nconst rawContent = $json.choices?.[0]?.message?.content ?? '';\nconst reply = parseModelReply(rawContent);\nconst sourceEmail = $('Normalize Email').item.json;\n\nreturn { json: buildTriageResult(reply, sourceEmail) };"
+      },
+      "id": "c2000006-0000-4000-8000-000000000100",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 250]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c2000007-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.needs_reply }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c2000007-0000-4000-8000-000000000100",
+      "name": "Needs Reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [1100, 180]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "operation": "create",
+        "subject": "={{ 'Re: ' + $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.draft_reply }}",
+        "sendTo": "={{ $json.from }}",
+        "options": {
+          "threadId": "={{ $json.thread_id }}"
+        }
+      },
+      "id": "c2000008-0000-4000-8000-000000000100",
+      "name": "Create Draft Reply (not sent)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1320, 120],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c2000009-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.gmail_label_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c2000009-0000-4000-8000-000000000100",
+      "name": "Has Label Mapping?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [1100, 380]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "addLabels",
+        "messageId": "={{ $json.email_id }}",
+        "labelIds": "={{ [$json.gmail_label_id] }}"
+      },
+      "id": "c2000010-0000-4000-8000-000000000100",
+      "name": "Apply Triage Label",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1320, 380],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "content": "## 02 Email AI triage\n\nManual demo: run **Manual Trigger (sample email)**. It uses a synthetic email, so the Gmail nodes will fail on the sample message id. Inspect **Parse Classification** output, which is the demo result.\n\nLive mode: activate the Gmail trigger path. Drafts are created, never sent.\n\nRequired env vars: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `GMAIL_LABEL_IDS_JSON`.\n\nNo network call happens until you configure a real endpoint and key.",
+        "height": 340,
+        "width": 440,
+        "color": 4
+      },
+      "id": "c2000011-0000-4000-8000-000000000100",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-120, -140]
+    }
+  ],
+  "connections": {
+    "Manual Trigger (sample email)": {
+      "main": [
+        [
+          {
+            "node": "Sample Email Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample Email Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Inbox Email (Gmail)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Email": {
+      "main": [
+        [
+          {
+            "node": "Classify with LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify with LLM": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classification": {
+      "main": [
+        [
+          {
+            "node": "Needs Reply?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Label Mapping?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Reply?": {
+      "main": [
+        [
+          {
+            "node": "Create Draft Reply (not sent)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Has Label Mapping?": {
+      "main": [
+        [
+          {
+            "node": "Apply Triage Label",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "active": false
+}

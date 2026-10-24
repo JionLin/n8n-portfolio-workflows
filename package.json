@@ -1,0 +1,11 @@
+{
+  "name": "n8n-portfolio-workflows",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-built n8n demo workflows (AI-assisted). Not a client project.",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check-workflows.mjs"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,249 @@
+{
+  "name": "03 - SupportPilot HTTP bridge (webhook to POST /api/chat)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ask-supportpilot",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d3000001-0000-4000-8000-000000000001",
+      "name": "Ask SupportPilot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [0, 200],
+      "webhookId": "d3000001-0000-4000-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst MIN_MESSAGE_LENGTH = 1;\nconst MAX_MESSAGE_LENGTH = 4000;\n\nfunction readChatInput(body) {\n  return {\n    message: String(body?.message ?? '').trim(),\n    conversationId: body?.conversation_id || null\n  };\n}\n\nfunction findValidationError({ message, conversationId }) {\n  const messageLength = [...message].length;\n  if (messageLength < MIN_MESSAGE_LENGTH) return 'message_required';\n  if (messageLength > MAX_MESSAGE_LENGTH) return 'message_too_long';\n  if (conversationId !== null && !UUID_PATTERN.test(String(conversationId))) return 'conversation_id_invalid';\n  return '';\n}\n\nconst chatInput = readChatInput($json.body);\n\nreturn {\n  json: {\n    validationError: findValidationError(chatInput),\n    message: chatInput.message,\n    conversation_id: chatInput.conversationId\n  }\n};"
+      },
+      "id": "d3000002-0000-4000-8000-000000000100",
+      "name": "Validate Chat Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d3000003-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.validationError }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d3000003-0000-4000-8000-000000000100",
+      "name": "Request Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [440, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": $json.validationError } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "d3000004-0000-4000-8000-000000000100",
+      "name": "Reject Invalid Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [660, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPPORTPILOT_BASE_URL }}/api/chat",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: $json.message, conversation_id: $json.conversation_id }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "d3000005-0000-4000-8000-000000000100",
+      "name": "POST SupportPilot /api/chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [660, 160],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "d3000006-0000-4000-8000-000000000100",
+      "name": "Return AgentReply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [880, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"error\": \"supportpilot_unavailable\", \"hint\": \"Check SUPPORTPILOT_BASE_URL and that the backend is running\" }",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "id": "d3000007-0000-4000-8000-000000000100",
+      "name": "Return Upstream Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [880, 260]
+    },
+    {
+      "parameters": {},
+      "id": "d3000008-0000-4000-8000-000000000001",
+      "name": "Health Check (manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 620]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPPORTPILOT_BASE_URL }}/api/health",
+        "authentication": "none",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "d3000008-0000-4000-8000-000000000100",
+      "name": "GET SupportPilot /api/health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [220, 620]
+    },
+    {
+      "parameters": {
+        "content": "## 03 SupportPilot HTTP bridge\n\nCalls `POST /api/chat` with the non-streaming JSON path. Request body: `message` (1..4000 characters) and optional `conversation_id` (UUID or null). SSE is not used because the HTTP Request node buffers the whole response body.\n\nRequired env var: `SUPPORTPILOT_BASE_URL`. Inside Docker use `http://host.docker.internal:8000`, not `127.0.0.1`.\n\nThe response is the AgentReply JSON, passed through unchanged, and includes `conversation_id`.",
+        "height": 300,
+        "width": 440,
+        "color": 4
+      },
+      "id": "d3000009-0000-4000-8000-000000000100",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, -120]
+    }
+  ],
+  "connections": {
+    "Ask SupportPilot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Chat Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Chat Request": {
+      "main": [
+        [
+          {
+            "node": "Request Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "POST SupportPilot /api/chat",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Invalid Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST SupportPilot /api/chat": {
+      "main": [
+        [
+          {
+            "node": "Return AgentReply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Upstream Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Check (manual)": {
+      "main": [
+        [
+          {
+            "node": "GET SupportPilot /api/health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "active": false
+}

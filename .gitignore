@@ -1,0 +1,16 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# n8n runtime data (credentials are encrypted with N8N_ENCRYPTION_KEY, but keep the volume out of git)
+n8n-data/
+.n8n/
+
+# Tooling
+node_modules/
+.DS_Store
+Thumbs.db

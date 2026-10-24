@@ -1,0 +1,92 @@
+{
+  "name": "01 - Error handler (Error Trigger to email alert)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b1000001-0000-4000-8000-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1000002-0000-4000-8000-000000000001",
+              "name": "subject",
+              "value": "={{ 'Workflow failed: ' + $json.workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "b1000002-0000-4000-8000-000000000002",
+              "name": "body",
+              "value": "={{ 'Failed node: ' + ($json.execution.lastNodeExecuted ?? 'unknown') + '\\nError: ' + ($json.execution.error?.message ?? 'no message') + '\\nExecution: ' + ($json.execution.url ?? 'n/a') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1000002-0000-4000-8000-000000000100",
+      "name": "Format Alert",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $env.NOTIFY_EMAIL }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "b1000003-0000-4000-8000-000000000100",
+      "name": "Email Error Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [440, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert": {
+      "main": [
+        [
+          {
+            "node": "Email Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "active": false
+}

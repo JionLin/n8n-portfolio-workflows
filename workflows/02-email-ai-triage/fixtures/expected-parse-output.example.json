@@ -1,0 +1,13 @@
+{
+  "email_id": "sample-message-001",
+  "thread_id": "sample-thread-001",
+  "from": "sender@example.com",
+  "subject": "Question about my March invoice",
+  "category": "billing",
+  "priority": "high",
+  "needs_reply": true,
+  "draft_reply": "Thanks for reaching out. We are checking the March invoice for a possible duplicate charge and will follow up shortly.",
+  "summary": "Customer thinks the March plan was charged twice and asks for a check.",
+  "gmail_label_id": "Label_billing_id",
+  "needs_human_review": false
+}

@@ -1,0 +1,7 @@
+{
+  "id": "sample-message-001",
+  "threadId": "sample-thread-001",
+  "from": "sender@example.com",
+  "subject": "Question about my March invoice",
+  "text": "Hi, I think I was charged twice for the March plan. Could someone check the invoice and let me know? Thanks."
+}
